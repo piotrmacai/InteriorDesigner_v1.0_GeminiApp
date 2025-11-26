@@ -1,6 +1,6 @@
 {
-  "name": "InteriorDesigner_v.1.0",
-  "description": "Drag, drop, and visualize any product in your personal space.",
+  "name": "ArchiDesigner-v1",
+  "description": "Upload a photo of your house, interior or garden, describe your vision, and let our AI bring your dream project to life.",
   "requestFramePermissions": [],
   "prompt": ""
 }

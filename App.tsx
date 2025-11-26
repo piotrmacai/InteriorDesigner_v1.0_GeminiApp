@@ -4,71 +4,68 @@
 */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { redesignRoom } from './services/geminiService';
+import { redesignRoom, generateRotatedView } from './services/geminiService';
+import { saveSessionsToLocalStorage, loadSessionsFromLocalStorage } from './services/storageService';
+import { getImageDimensions } from './utils/fileUtils';
 import Header from './components/Header';
 import ImageUploader from './components/ImageUploader';
 import Spinner from './components/Spinner';
 import DebugModal from './components/DebugModal';
 import DrawingModal from './components/DrawingModal';
-import TouchGhost from './components/TouchGhost';
-
-// Helper to convert a data URL string to a File object
-const dataURLtoFile = (dataurl: string, filename: string): File => {
-    const arr = dataurl.split(',');
-    if (arr.length < 2) throw new Error("Invalid data URL");
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    if (!mimeMatch || !mimeMatch[1]) throw new Error("Could not parse MIME type from data URL");
-
-    const mime = mimeMatch[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while(n--){
-        u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new File([u8arr], filename, {type:mime});
-}
-
-// Helper to get intrinsic image dimensions from a File object
-const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            if (!event.target?.result) {
-                return reject(new Error("Failed to read file."));
-            }
-            const img = new Image();
-            img.src = event.target.result as string;
-            img.onload = () => {
-                resolve({ width: img.naturalWidth, height: img.naturalHeight });
-            };
-            img.onerror = (err) => reject(new Error(`Image load error: ${err}`));
-        };
-        reader.onerror = (err) => reject(new Error(`File reader error: ${err}`));
-    });
-};
-
+import AddProductModal from './components/AddProductModal';
+import SceneryModal from './components/SceneryModal';
+import HistorySidebar from './components/HistorySidebar';
+import { DesignSession } from './types';
 
 const loadingMessages = [
-    "Analyzing your room's layout...",
-    "Interpreting your creative sketch...",
-    "Consulting with our AI interior designer...",
-    "Painting the virtual walls...",
-    "Arranging the new furniture...",
-    "Rendering your beautiful new space..."
+    "Consulting AI Architect...",
+    "Analyzing Structural Geometry...",
+    "Applying Photorealistic Textures...",
+    "Adjusting Lighting & Atmosphere...",
+    "Rendering High-Fidelity Output...",
+    "Finalizing Architectural Details...",
 ];
 
-const UploadIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+const ArrowLeftIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M15 18l-6-6 6-6"/></svg>
+);
+
+const ArrowRightIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M9 18l6-6-6-6"/></svg>
+);
+
+const UndoIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M21 9H6.47a2 2 0 0 0-1.79 1.11L2 16"/><path d="M6 13 2 16l4 3"/></svg>
+);
+
+const RedoIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M3 9h14.53a2 2 0 0 1 1.79 1.11L22 16"/><path d="M18 13l4 3-4 3"/></svg>
+);
+
+const TrashIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+);
+
+const SceneryIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
 );
 
 const App: React.FC = () => {
+  // Session management state
+  const [sessions, setSessions] = useState<DesignSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+
+  // Active session's working state
   const [sceneImage, setSceneImage] = useState<File | null>(null);
   const [productImage, setProductImage] = useState<File | null>(null);
   const [sketchedImage, setSketchedImage] = useState<File | null>(null);
-  const [generatedImage, setGeneratedImage] = useState<File | null>(null);
+  const [history, setHistory] = useState<File[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [prompt, setPrompt] = useState<string>('');
+  const [originalDimensions, setOriginalDimensions] = useState<{width: number, height: number} | null>(null);
+
+  // UI state
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
@@ -77,89 +74,191 @@ const App: React.FC = () => {
   const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
   const [isDebugModalOpen, setIsDebugModalOpen] = useState(false);
   const [isDrawingModalOpen, setIsDrawingModalOpen] = useState(false);
-  
-  const [originalDimensions, setOriginalDimensions] = useState<{width: number, height: number} | null>(null);
-
-  // Drag and drop state
-  const [draggedProduct, setDraggedProduct] = useState<{ imageUrl: string } | null>(null);
-  const [touchGhostPosition, setTouchGhostPosition] = useState<{ x: number; y: number } | null>(null);
-  const [isProductDraggingOver, setIsProductDraggingOver] = useState<boolean>(false);
-  const [dropCoordinates, setDropCoordinates] = useState<{ x: number, y: number } | null>(null);
+  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [isSceneryModalOpen, setIsSceneryModalOpen] = useState(false);
 
   const sceneUploaderRef = useRef<HTMLImageElement>(null);
 
+  const currentGeneratedImage = history[historyIndex] ?? null;
+  
   const sceneImageUrl = sceneImage ? URL.createObjectURL(sceneImage) : null;
-  const productImageUrl = productImage ? URL.createObjectURL(productImage) : null;
   const sketchedImageUrl = sketchedImage ? URL.createObjectURL(sketchedImage) : null;
-  const generatedImageUrl = generatedImage ? URL.createObjectURL(generatedImage) : null;
+  const generatedImageUrl = currentGeneratedImage ? URL.createObjectURL(currentGeneratedImage) : null;
   const displayImageUrl = generatedImageUrl || sketchedImageUrl || sceneImageUrl;
   
-  // Effect to calculate and store the original dimensions of the user's uploaded scene
+  // Effect to cycle loading messages
   useEffect(() => {
-    if (sceneImage) {
-        getImageDimensions(sceneImage)
-            .then(setOriginalDimensions)
-            .catch(err => {
-                console.error("Could not get image dimensions:", err);
-                setError("Could not read image dimensions. Please try a different image.");
-            });
-    } else {
-        setOriginalDimensions(null);
+    if (isLoading) {
+      const interval = setInterval(() => {
+        setLoadingMessageIndex((prevIndex) => (prevIndex + 1) % loadingMessages.length);
+      }, 2500);
+      return () => clearInterval(interval);
     }
-  }, [sceneImage]);
+  }, [isLoading]);
+
+  // Effect for loading/saving sessions from/to local storage
+  useEffect(() => {
+    loadSessionsFromLocalStorage().then(loadedSessions => {
+      setSessions(loadedSessions);
+      if (loadedSessions.length > 0) {
+        // Activate the most recent session
+        handleSelectSession(loadedSessions[0].id);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (sessions.length > 0) {
+      saveSessionsToLocalStorage(sessions);
+    }
+  }, [sessions]);
+
+
+  const clearWorkingState = () => {
+    setSceneImage(null);
+    setProductImage(null);
+    setSketchedImage(null);
+    setHistory([]);
+    setHistoryIndex(-1);
+    setPrompt('');
+    setError(null);
+    setIsLoading(false);
+    setDebugImageUrl(null);
+    setDebugPrompt(null);
+    setOriginalDimensions(null);
+  }
+
+  const handleNewProject = useCallback(() => {
+    clearWorkingState();
+    setActiveSessionId(null);
+  }, []);
+  
+  const handleSelectSession = useCallback((sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (session) {
+      clearWorkingState();
+      setSceneImage(session.sceneImage);
+      setOriginalDimensions(session.originalDimensions);
+      setHistory(session.generations);
+      setHistoryIndex(session.generations.length - 1);
+      setActiveSessionId(session.id);
+    }
+  }, [sessions]);
+
+  const handleDeleteSession = useCallback((sessionId: string) => {
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    if (activeSessionId === sessionId) {
+      const remainingSessions = sessions.filter(s => s.id !== sessionId);
+      if (remainingSessions.length > 0) {
+        handleSelectSession(remainingSessions[0].id);
+      } else {
+        handleNewProject();
+      }
+    }
+  }, [activeSessionId, sessions, handleSelectSession, handleNewProject]);
+
+  const handleSceneImageUpload = async (file: File) => {
+    try {
+      const dimensions = await getImageDimensions(file);
+      const thumbnailReader = new FileReader();
+      thumbnailReader.readAsDataURL(file);
+      thumbnailReader.onload = () => {
+        const newSession: DesignSession = {
+          id: Date.now().toString(),
+          name: `Design ${sessions.length + 1}`,
+          timestamp: Date.now(),
+          thumbnail: thumbnailReader.result as string,
+          sceneImage: file,
+          originalDimensions: dimensions,
+          generations: []
+        };
+        
+        setSessions(prev => [newSession, ...prev]);
+        setActiveSessionId(newSession.id);
+        
+        // Load this new session into the working state
+        setSceneImage(file);
+        setOriginalDimensions(dimensions);
+        setHistory([]);
+        setHistoryIndex(-1);
+        setPrompt('');
+        setSketchedImage(null);
+        setProductImage(null);
+        setError(null);
+      }
+    } catch(err) {
+      console.error("Could not create new session:", err);
+      setError("Could not read image dimensions. Please try a different image.");
+    }
+  };
 
   const handleInstantStart = useCallback(async () => {
     setError(null);
     try {
-      const response = await fetch('https://storage.googleapis.com/aistudio-web-public-prod/archidraw/scene.jpeg');
+      const response = await fetch('https://storage.googleapis.com/aistudio-web-public-prod/prompts/v1/exterior.jpeg');
       if (!response.ok) {
         throw new Error('Failed to load default image');
       }
       const blob = await response.blob();
-      const file = new File([blob], 'scene.jpeg', { type: 'image/jpeg' });
-      setSceneImage(file);
-      setPrompt('Make this room minimalist, with light wood furniture and lots of plants.');
+      const file = new File([blob], 'exterior.jpeg', { type: 'image/jpeg' });
+      await handleSceneImageUpload(file);
+      setPrompt('Add a modern stone pathway, plant vibrant flowerbeds along the front, and add a large oak tree on the right.');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       setError(`Could not load default image. Details: ${errorMessage}`);
       console.error(err);
     }
-  }, []);
+  }, [sessions]);
+  
+  const addImageToHistory = (newImage: File) => {
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(newImage);
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
 
-  const handleGenerate = useCallback(async () => {
-    // The base image for the NEXT generation is the LATEST image we have.
-    // Order is important: sketch > latest generated > original scene.
-    const imageToProcess = sketchedImage || generatedImage || sceneImage;
-    if (!imageToProcess || !prompt || !originalDimensions) {
-      setError('Please upload a scene and provide a design prompt.');
+    if (activeSessionId) {
+      setSessions(prevSessions => prevSessions.map(s => 
+        s.id === activeSessionId ? { ...s, generations: newHistory } : s
+      ));
+    }
+  };
+
+  const executeGeneration = async (customPrompt: string = prompt, isScenery: boolean = false) => {
+    // Current working image is either sketch, last generation, or original
+    const imageToProcess = sketchedImage || currentGeneratedImage || sceneImage;
+    
+    // We also need the strict original for structural reference
+    const originalReference = sceneImage;
+
+    if (!imageToProcess || !originalReference || !customPrompt || !originalDimensions) {
+      setError('Missing project data. Please ensure an image is uploaded.');
       return;
     }
 
     setIsLoading(true);
     setError(null);
     try {
-      const { finalImageUrl, debugImageUrl, finalPrompt } = await redesignRoom(
+      const { finalImageUrl, debugImageUrl: debugUrl, finalPrompt } = await redesignRoom(
         imageToProcess,
+        originalReference, // ALWAYS pass the original for structural grounding
         originalDimensions.width,
         originalDimensions.height,
-        prompt,
+        customPrompt,
         productImage,
         !!sketchedImage,
-        dropCoordinates
+        isScenery
       );
       
-      const newGeneratedFile = dataURLtoFile(finalImageUrl, `generated-scene-${Date.now()}.jpeg`);
+      const newGeneratedFile = await (await fetch(finalImageUrl)).blob().then(blob => new File([blob], `generated-scene-${Date.now()}.jpeg`, {type: 'image/jpeg'}));
       
-      // Set the new image as the latest version
-      setGeneratedImage(newGeneratedFile);
+      addImageToHistory(newGeneratedFile);
       
-      // Clear inputs that have been "used" in this generation step
+      // Cleanup one-time states
       setSketchedImage(null);
       setProductImage(null);
-      setDropCoordinates(null);
-      setPrompt(''); // Clear prompt for the next command
+      if (!isScenery) setPrompt('');
 
-      setDebugImageUrl(debugImageUrl);
+      setDebugImageUrl(debugUrl);
       setDebugPrompt(finalPrompt);
 
     } catch (err) {
@@ -169,396 +268,258 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [sceneImage, generatedImage, sketchedImage, prompt, productImage, dropCoordinates, originalDimensions]);
+  };
 
+  const handleGenerate = useCallback(() => {
+      executeGeneration(prompt, false);
+  }, [prompt, sketchedImage, currentGeneratedImage, sceneImage, productImage, originalDimensions]);
 
-  const handleReset = useCallback(() => {
-    setSceneImage(null);
-    setProductImage(null);
-    setSketchedImage(null);
-    setGeneratedImage(null);
-    setPrompt('');
+  const handleSceneryChange = useCallback((sceneryPrompt: string) => {
+      executeGeneration(sceneryPrompt, true);
+      setIsSceneryModalOpen(false);
+  }, [sketchedImage, currentGeneratedImage, sceneImage, productImage, originalDimensions]);
+
+  const handleRotateView = useCallback(async (direction: 'left' | 'right') => {
+    const imageToRotate = currentGeneratedImage;
+    if (!imageToRotate || !originalDimensions) {
+      setError('A generated image must exist to create a rotated view.');
+      return;
+    }
+
+    setIsLoading(true);
     setError(null);
-    setIsLoading(false);
-    setDebugImageUrl(null);
-    setDebugPrompt(null);
-    setDropCoordinates(null);
-    setOriginalDimensions(null);
-  }, []);
 
-  const handleSaveSketch = useCallback((dataUrl: string) => {
-    const file = dataURLtoFile(dataUrl, `sketch-${Date.now()}.png`);
+    try {
+        const { finalImageUrl } = await generateRotatedView(
+            imageToRotate,
+            originalDimensions.width,
+            originalDimensions.height,
+            direction
+        );
+        const newRotatedFile = await (await fetch(finalImageUrl)).blob().then(blob => new File([blob], `rotated-scene-${Date.now()}.jpeg`, {type: 'image/jpeg'}));
+        addImageToHistory(newRotatedFile);
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        setError(`Failed to generate the rotated view. ${errorMessage}`);
+        console.error(err);
+    } finally {
+        setIsLoading(false);
+    }
+  }, [currentGeneratedImage, originalDimensions, history, historyIndex, activeSessionId]);
+
+  const handleRevertToOriginal = useCallback(() => {
+    setHistory([]);
+    setHistoryIndex(-1);
+    setSketchedImage(null);
+    if (activeSessionId) {
+      setSessions(prev => prev.map(s => 
+        s.id === activeSessionId ? { ...s, generations: [] } : s
+      ));
+    }
+  }, [activeSessionId]);
+
+  const handleSaveSketch = useCallback(async (dataUrl: string) => {
+    const file = await (await fetch(dataUrl)).blob().then(blob => new File([blob], `sketch-${Date.now()}.png`, {type: 'image/png'}));
     setSketchedImage(file);
     setIsDrawingModalOpen(false);
   }, []);
-
-  const handleRemoveSketch = () => {
-    setSketchedImage(null);
-  };
-
-  const handleRemoveProduct = () => {
-    setProductImage(null);
-    setDropCoordinates(null);
+  
+  const handleDownload = () => {
+    if (!generatedImageUrl) return;
+    const link = document.createElement('a');
+    link.href = generatedImageUrl;
+    link.download = `design-${Date.now()}.jpeg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
   
-  // --- Drag and Drop Handlers ---
+  const handleUndo = () => historyIndex >= 0 && setHistoryIndex(historyIndex - 1);
+  const handleRedo = () => historyIndex < history.length - 1 && setHistoryIndex(historyIndex + 1);
+  const handleRemoveSketch = () => setSketchedImage(null);
+  const handleRemoveProduct = () => setProductImage(null);
   
-  const handleProductDragStart = (e: React.DragEvent) => {
-    if (!productImageUrl) return;
-    e.dataTransfer.setData('application/json', JSON.stringify({ isProduct: true }));
-    e.dataTransfer.effectAllowed = 'move';
-    setDraggedProduct({ imageUrl: productImageUrl });
-  };
-
-  const handleProductDragEnd = () => {
-      setDraggedProduct(null);
-      setIsProductDraggingOver(false);
-  };
-
-  const handleSceneDragOver = (e: React.DragEvent) => {
-      e.preventDefault();
-      if (draggedProduct) {
-          setIsProductDraggingOver(true);
-      }
-  };
-
-  const handleSceneDragLeave = () => {
-      setIsProductDraggingOver(false);
+  const handleAddCustomProduct = (file: File) => {
+    setProductImage(file);
+    setIsAddProductModalOpen(false);
   };
   
-  const handleSceneDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsProductDraggingOver(false);
+  const canUndo = historyIndex >= 0;
+  const canRedo = historyIndex < history.length - 1;
 
-    const imgElement = sceneUploaderRef.current;
-    if (!imgElement || !productImage) return;
-
-    try {
-        const productData = e.dataTransfer.getData('application/json');
-        if (!productData) return;
-        
-        const rect = imgElement.getBoundingClientRect();
-        const { naturalWidth, naturalHeight } = imgElement;
-        const aspectRatio = naturalWidth / naturalHeight;
-        const rectAspectRatio = rect.width / rect.height;
-
-        let contentWidth = rect.width;
-        let contentHeight = rect.height;
-        let offsetX = 0;
-        let offsetY = 0;
-
-        if (aspectRatio > rectAspectRatio) { // Letterboxed
-            contentHeight = rect.width / aspectRatio;
-            offsetY = (rect.height - contentHeight) / 2;
-        } else { // Pillarboxed
-            contentWidth = rect.height * aspectRatio;
-            offsetX = (rect.width - contentWidth) / 2;
-        }
-
-        const x = e.clientX - rect.left - offsetX;
-        const y = e.clientY - rect.top - offsetY;
-
-        if (x < 0 || x > contentWidth || y < 0 || y > contentHeight) {
-            return;
-        }
-
-        const relativeX = x / contentWidth;
-        const relativeY = y / contentHeight;
-        
-        setDropCoordinates({ x: relativeX, y: relativeY });
-
-    } catch (err) {
-        console.error("Drop failed:", err);
-        setError("Failed to place the product. Please try again.");
-    }
-  };
-
-  // --- Touch Handlers ---
-  const handleProductTouchStart = (e: React.TouchEvent) => {
-      if (!productImageUrl) return;
-      setDraggedProduct({ imageUrl: productImageUrl });
-      setTouchGhostPosition({ x: e.touches[0].clientX, y: e.touches[0].clientY });
-  };
-  
-  const handleProductTouchMove = (e: React.TouchEvent) => {
-      if (!draggedProduct) return;
-      e.preventDefault();
-      setTouchGhostPosition({ x: e.touches[0].clientX, y: e.touches[0].clientY });
-  };
-  
-  const handleProductTouchEnd = (e: React.TouchEvent) => {
-      if (!draggedProduct) return;
-      
-      const touch = e.changedTouches[0];
-      const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
-      
-      if (dropTarget && dropTarget.closest('[data-dropzone-id="scene-uploader"]')) {
-          const dropEvent = new DragEvent("drop", {
-              bubbles: true,
-              cancelable: true,
-              clientX: touch.clientX,
-              clientY: touch.clientY,
-          });
-          Object.defineProperty(dropEvent, 'dataTransfer', {
-              value: {
-                  getData: () => JSON.stringify({ isProduct: true })
-              }
-          });
-          dropTarget.dispatchEvent(dropEvent);
-      }
-      setDraggedProduct(null);
-      setTouchGhostPosition(null);
-  };
-  
-  useEffect(() => {
-    return () => {
-        if (sceneImageUrl) URL.revokeObjectURL(sceneImageUrl);
-        if (productImageUrl) URL.revokeObjectURL(productImageUrl);
-        if (sketchedImageUrl) URL.revokeObjectURL(sketchedImageUrl);
-        if (generatedImageUrl) URL.revokeObjectURL(generatedImageUrl);
-    };
-  }, [sceneImageUrl, productImageUrl, sketchedImageUrl, generatedImageUrl]);
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-    if (isLoading) {
-        setLoadingMessageIndex(0); // Reset on start
-        interval = setInterval(() => {
-            setLoadingMessageIndex(prevIndex => (prevIndex + 1) % loadingMessages.length);
-        }, 3000);
-    }
-    return () => {
-        if (interval) clearInterval(interval);
-    };
-  }, [isLoading]);
-  
-  const renderContent = () => {
-    if (error) {
-       return (
-           <div className="text-center animate-fade-in bg-red-50 border border-red-200 p-8 rounded-xl max-w-2xl mx-auto">
-            <h2 className="text-3xl font-extrabold mb-4 text-red-800">An Error Occurred</h2>
-            <p className="text-lg text-red-700 mb-6">{error}</p>
-            <button
-                onClick={handleReset}
-                className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-colors"
-              >
-                Try Again
-            </button>
-          </div>
-        );
-    }
-    
-    if (!sceneImage) {
-        return (
-            <div className="w-full max-w-2xl mx-auto text-center animate-fade-in">
-                <ImageUploader 
-                    id="scene-uploader"
-                    onFileSelect={(file) => { setSceneImage(file); setSketchedImage(null); setGeneratedImage(null); }}
-                    imageUrl={null}
-                    disabled={false}
-                />
-                <div className="mt-6">
-                    <p className="text-slate-500">
-                        Upload a photo of your room to get started.
-                    </p>
-                    <p className="text-slate-500 mt-2">
-                        Or click{' '}
-                        <button
-                            onClick={handleInstantStart}
-                            className="font-bold text-blue-600 hover:text-blue-800 underline transition-colors"
-                        >
-                            here
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900 font-sans">
+      <Header onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+      <div className="w-full max-w-8xl mx-auto flex flex-1 overflow-hidden px-4 sm:px-6 md:px-8">
+        <HistorySidebar 
+          isOpen={isSidebarOpen}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={handleSelectSession}
+          onNewSession={handleNewProject}
+          onDeleteSession={handleDeleteSession}
+        />
+        <main className={`flex-1 flex flex-col items-center p-0 sm:p-2 md:p-4 transition-all duration-300 ${isSidebarOpen ? 'md:ml-72' : 'ml-0'}`}>
+          <div className="w-full max-w-5xl mx-auto flex flex-col gap-6">
+            
+            {/* Main Workspace Card */}
+            <div className={`relative p-1 sm:p-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 transition-opacity duration-500 flex flex-col ${isLoading ? 'opacity-60 pointer-events-none' : ''}`}>
+              
+              {/* Toolbar */}
+              {(history.length > 0 || sketchedImage || sceneImage) && (
+                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 mb-2">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Tools</span>
+                        <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-2"></div>
+                         <button onClick={() => setIsDrawingModalOpen(true)} className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 transition-colors">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                            Sketch
                         </button>
-                        {' '}for an instant start.
-                    </p>
-                </div>
-            </div>
-        );
-    }
-    
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 animate-fade-in">
-        {/* Left Column: Image Viewer */}
-        <div className="lg:col-span-3">
-             <div className="relative">
-                <ImageUploader 
-                    ref={sceneUploaderRef}
-                    id="scene-uploader"
-                    onFileSelect={() => {}} // Disallow changing image here, use Start Over
-                    imageUrl={displayImageUrl}
-                    disabled={isLoading}
-                    showDebugButton={!!debugImageUrl && !isLoading}
-                    onDebugClick={() => setIsDebugModalOpen(true)}
-                    isProductDraggingOver={isProductDraggingOver}
-                    onProductDragOver={handleSceneDragOver}
-                    onProductDragLeave={handleSceneDragLeave}
-                    onProductDrop={handleSceneDrop}
+                        <button onClick={() => setIsAddProductModalOpen(true)} className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 transition-colors ml-3">
+                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                             Add Product
+                        </button>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                         <button onClick={handleUndo} disabled={!canUndo} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 disabled:opacity-30 transition-colors"><UndoIcon /></button>
+                         <button onClick={handleRedo} disabled={!canRedo} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 disabled:opacity-30 transition-colors"><RedoIcon /></button>
+                         <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                         <button onClick={handleRevertToOriginal} className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 hover:text-red-600 transition-colors" title="Revert to Original"><TrashIcon /></button>
+                    </div>
+                 </div>
+              )}
+
+              <div className="relative group w-full bg-gray-50 dark:bg-gray-900/50 rounded-lg overflow-hidden min-h-[300px] flex items-center justify-center">
+                <ImageUploader
+                  ref={sceneUploaderRef}
+                  id="scene-uploader"
+                  onFileSelect={handleSceneImageUpload}
+                  imageUrl={displayImageUrl}
+                  disabled={isLoading || !!activeSessionId}
                 />
-                 {productImageUrl && dropCoordinates && (
-                    <img
-                        src={productImageUrl}
-                        alt="Dropped product"
-                        className="absolute w-20 h-20 object-contain pointer-events-none transition-all animate-fade-in"
-                        style={{
-                            left: `${dropCoordinates.x * 100}%`,
-                            top: `${dropCoordinates.y * 100}%`,
-                            transform: 'translate(-50%, -50%)',
-                        }}
-                    />
+                
+                {/* Overlay Controls */}
+                {(history.length > 0 || sketchedImage) && (
+                  <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                     <button onClick={() => handleRotateView('left')} disabled={!currentGeneratedImage} className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white shadow-lg disabled:opacity-50 transition-all"><ArrowLeftIcon /></button>
+                     <button onClick={() => handleRotateView('right')} disabled={!currentGeneratedImage} className="p-2 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white shadow-lg disabled:opacity-50 transition-all"><ArrowRightIcon /></button>
+                  </div>
                 )}
-            </div>
-            <div className="flex items-center justify-between mt-4">
-                <div className="flex items-center gap-4">
-                    {!sketchedImage && (
-                         <button 
-                            onClick={() => setIsDrawingModalOpen(true)}
-                            className="bg-white hover:bg-slate-100 text-slate-800 font-semibold py-2 px-4 rounded-lg text-sm transition-colors border border-slate-300 shadow-sm disabled:opacity-50"
-                            disabled={isLoading}
-                        >
-                            ✏️ Add Sketch
-                        </button>
-                    )}
+                
+                {/* Status Badges */}
+                <div className="absolute top-4 left-4 flex flex-col gap-2">
                     {sketchedImage && (
-                        <div className="flex items-center gap-4">
-                            <button 
-                                onClick={() => setIsDrawingModalOpen(true)}
-                                className="font-semibold text-blue-600 hover:text-blue-800 transition-colors text-sm disabled:opacity-50"
-                                disabled={isLoading}
-                            >
-                                Edit Sketch
-                            </button>
-                            <button
-                                onClick={handleRemoveSketch}
-                                className="text-sm text-red-600 hover:text-red-800 font-semibold disabled:opacity-50"
-                                disabled={isLoading}
-                            >
-                                Remove Sketch
-                            </button>
-                        </div>
+                    <div className="bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg animate-fade-in">
+                        <span>Sketch Overlay Active</span>
+                        <button onClick={handleRemoveSketch} className="hover:text-indigo-200 transition text-lg leading-none">&times;</button>
+                    </div>
+                    )}
+                    {productImage && (
+                    <div className="bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg animate-fade-in">
+                        <span>Product Insert Active</span>
+                        <button onClick={handleRemoveProduct} className="hover:text-emerald-200 transition text-lg leading-none">&times;</button>
+                    </div>
                     )}
                 </div>
-                 <button
-                      onClick={handleReset}
-                      className="text-sm text-blue-600 hover:text-blue-800 font-semibold disabled:opacity-50"
-                      disabled={isLoading}
-                  >
-                      Start Over
-                  </button>
-            </div>
-        </div>
+              </div>
 
-        {/* Right Column: Controls */}
-        <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl shadow-lg p-6 sticky top-8 flex flex-col gap-6">
-                {isLoading ? (
-                    <div className="animate-fade-in text-center py-10">
-                        <Spinner />
-                        <p className="text-lg mt-4 text-slate-600 transition-opacity duration-500">{loadingMessages[loadingMessageIndex]}</p>
-                    </div>
-                ) : (
-                <>
-                    {/* Step 2: Product Uploader */}
-                    <div className="flex flex-col">
-                        <h2 className="text-xl font-bold text-slate-800">1. Add a Product (Optional)</h2>
-                        {productImage && productImageUrl ? (
-                            <div className="mt-4 text-center">
-                                <div className="relative inline-block group">
-                                    <div 
-                                        className="relative bg-slate-50 p-2 border-2 border-dashed border-slate-300 rounded-lg cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow"
-                                        draggable="true"
-                                        onDragStart={handleProductDragStart}
-                                        onDragEnd={handleProductDragEnd}
-                                        onTouchStart={handleProductTouchStart}
-                                        onTouchMove={handleProductTouchMove}
-                                        onTouchEnd={handleProductTouchEnd}
-                                    >
-                                        <img src={productImageUrl} alt="Uploaded product" className="w-32 h-32 object-contain" />
-                                    </div>
-                                    <button
-                                        onClick={handleRemoveProduct}
-                                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-lg opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110"
-                                        aria-label="Remove Product"
-                                    >
-                                        &times;
-                                    </button>
-                                </div>
-                                <p className="text-slate-500 mt-2 text-sm">Drag the product onto your room image.</p>
-                            </div>
-                        ) : (
-                            <div className="mt-4">
-                                <label htmlFor="product-uploader-input" className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 px-4 rounded-lg cursor-pointer transition-colors border border-slate-300">
-                                    <UploadIcon />
-                                    Upload from device
-                                </label>
-                                <input
-                                    type="file"
-                                    id="product-uploader-input"
-                                    onChange={(e) => { const file = e.target.files?.[0]; if (file) setProductImage(file); }}
-                                    accept="image/png, image/jpeg, image/webp"
-                                    className="hidden"
-                                />
-                            </div>
+              {/* Action Bar (Below Image) */}
+              {sceneImage && (
+                   <div className="flex items-center justify-center gap-4 py-3 bg-gray-50 dark:bg-gray-900/30 border-t border-gray-100 dark:border-gray-700 rounded-b-lg mt-1">
+                        <button 
+                            onClick={() => setIsSceneryModalOpen(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition shadow-sm"
+                        >
+                            <span className="text-indigo-500"><SceneryIcon /></span>
+                            Change Scenery
+                        </button>
+                        
+                        {generatedImageUrl && (
+                            <button 
+                                onClick={handleDownload}
+                                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition shadow-sm"
+                            >
+                                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4-4m0 0l-4 4m4-4v12"></path></svg>
+                                Download
+                            </button>
                         )}
-                    </div>
+                   </div>
+              )}
 
-                    {/* Step 3: Prompt */}
-                    <div className="flex flex-col">
-                        <h2 className="text-xl font-bold text-slate-800">
-                            2. Describe Your Vision
-                        </h2>
-                        <textarea
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            placeholder="e.g., 'Make it a cozy, rustic living room with a stone fireplace.'"
-                            className="mt-4 w-full h-32 p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white"
-                            aria-label="Design vision prompt"
-                        />
-                    </div>
-
-                    {/* Generate Button */}
-                    <div className="mt-2">
+              {!sceneImage && !isLoading && (
+                <div className="mt-6 text-center pb-6">
+                  <p className="text-gray-500 dark:text-gray-400">Or, try an enterprise example:</p>
+                  <button onClick={handleInstantStart} className="mt-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+                    Load Residential Project Sample
+                  </button>
+                </div>
+              )}
+            </div>
+              
+            {/* Prompt Input Area */}
+            {sceneImage && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-1">
+                    <div className="flex flex-col md:flex-row items-stretch gap-0">
+                        <div className="flex-grow relative">
+                            <input
+                                type="text"
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                placeholder="Instruction (e.g., 'Add a modern pergola', 'Replace grass with stone pavers')"
+                                className="w-full h-full px-6 py-4 bg-transparent border-none focus:ring-0 text-gray-800 dark:text-gray-100 placeholder-gray-400 text-lg"
+                                disabled={isLoading}
+                                onKeyDown={(e) => e.key === 'Enter' && prompt && !isLoading && handleGenerate()}
+                            />
+                        </div>
                         <button
                             onClick={handleGenerate}
-                            disabled={!prompt.trim()}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-all disabled:bg-slate-400 disabled:cursor-not-allowed transform hover:scale-105"
+                            disabled={isLoading || !prompt}
+                            className="m-1 px-8 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md flex items-center justify-center gap-2"
                         >
-                            Generate Design
+                            {isLoading ? 'Processing...' : 'Generate'}
+                            {!isLoading && <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>}
                         </button>
                     </div>
-                </>
-                )}
-            </div>
-        </div>
-      </div>
-    );
-  };
-  
-  return (
-    <div className="min-h-screen">
-      <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-        <Header />
-        <main className="mt-8">
-          {renderContent()}
+                </div>
+            )}
+            
+            {/* Overlay Loader */}
+            {isLoading && (
+              <div className="fixed inset-0 bg-white/90 dark:bg-gray-900/90 z-50 flex flex-col items-center justify-center backdrop-blur-sm">
+                <Spinner />
+                <p className="mt-6 text-xl font-bold text-gray-800 dark:text-gray-200 animate-pulse tracking-wide">{loadingMessages[loadingMessageIndex]}</p>
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Processing high-resolution architectural data...</p>
+              </div>
+            )}
+            
+            {error && (
+              <div className="w-full p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg animate-fade-in flex items-start gap-3" role="alert">
+                <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <div>
+                    <strong className="font-bold block mb-1">System Error</strong>
+                    {error}
+                </div>
+              </div>
+            )}
+          
+            <footer className="w-full flex justify-between items-center pb-8 pt-4 px-2">
+              <button onClick={handleNewProject} className="text-xs font-semibold text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 uppercase tracking-widest transition">Start New Project</button>
+              {debugImageUrl && (
+                <button onClick={() => setIsDebugModalOpen(true)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">View Debug Data</button>
+              )}
+            </footer>
+
+          </div>
         </main>
       </div>
-      <TouchGhost
-          imageUrl={draggedProduct?.imageUrl ?? null}
-          position={touchGhostPosition}
-      />
-      <DebugModal 
-        isOpen={isDebugModalOpen} 
-        onClose={() => setIsDebugModalOpen(false)}
-        imageUrl={debugImageUrl}
-        prompt={debugPrompt}
-      />
+
+      <DebugModal isOpen={isDebugModalOpen} onClose={() => setIsDebugModalOpen(false)} imageUrl={debugImageUrl} prompt={debugPrompt} />
       {displayImageUrl && (
-        <DrawingModal
-            isOpen={isDrawingModalOpen}
-            onClose={() => setIsDrawingModalOpen(false)}
-            onSave={handleSaveSketch}
-            backgroundImageUrl={displayImageUrl}
-        />
+        <DrawingModal isOpen={isDrawingModalOpen} onClose={() => setIsDrawingModalOpen(false)} onSave={handleSaveSketch} backgroundImageUrl={displayImageUrl} />
       )}
+      <AddProductModal isOpen={isAddProductModalOpen} onClose={() => setIsAddProductModalOpen(false)} onFileSelect={handleAddCustomProduct} />
+      <SceneryModal isOpen={isSceneryModalOpen} onClose={() => setIsSceneryModalOpen(false)} onSelectScenery={handleSceneryChange} />
     </div>
   );
 };

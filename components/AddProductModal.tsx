@@ -40,19 +40,19 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onFi
       role="dialog"
     >
       <div 
-        className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 md:p-8 relative transform transition-all"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg p-6 md:p-8 relative transform transition-all"
         onClick={handleModalContentClick}
         role="document"
       >
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-800 transition-colors"
+          className="absolute top-4 right-4 text-zinc-500 dark:text-gray-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
           aria-label="Close modal"
         >
           <CloseIcon />
         </button>
         <div className="text-center">
-          <h2 className="text-2xl font-extrabold mb-4 text-zinc-800">Add Your Own Product</h2>
+          <h2 className="text-2xl font-extrabold mb-4 text-zinc-800 dark:text-gray-100">Add Your Own Product</h2>
         </div>
         <ImageUploader id="custom-product-uploader" onFileSelect={onFileSelect} imageUrl={null} />
       </div>

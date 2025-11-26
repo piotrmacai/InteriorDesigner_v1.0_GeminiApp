@@ -22,7 +22,7 @@ interface ImageUploaderProps {
 }
 
 const UploadIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-slate-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
     </svg>
 );
@@ -55,10 +55,11 @@ const ImageUploader = forwardRef<HTMLImageElement, ImageUploaderProps>(({ id, la
       const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedTypes.includes(file.type)) {
         setFileTypeError('For best results, please use PNG, JPG, or JPEG formats.');
+        onFileSelect(file); // still pass it up, let parent decide
       } else {
         setFileTypeError(null);
+        onFileSelect(file);
       }
-      onFileSelect(file);
     }
   };
 
@@ -70,63 +71,47 @@ const ImageUploader = forwardRef<HTMLImageElement, ImageUploaderProps>(({ id, la
   const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
       if (disabled) return;
-      // This is for file dragging, not product dragging
       if (event.dataTransfer.types.includes('Files')) {
         setIsDraggingOver(true);
       }
-      // Let parent handle product drag over
-      if (onProductDragOver) {
-        onProductDragOver(event);
-      }
-  }, [disabled, onProductDragOver]);
+  }, [disabled]);
 
   const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
       setIsDraggingOver(false);
-      if (onProductDragLeave) {
-        onProductDragLeave(event);
-      }
-  }, [onProductDragLeave]);
+  }, []);
 
   const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
-      
-      // Handle product drop
-      if (event.dataTransfer.types.includes('application/json') && onProductDrop) {
-          onProductDrop(event);
-          return;
-      }
-      
-      // Handle file drop
       setIsDraggingOver(false);
       if (disabled) return;
       
       const file = event.dataTransfer.files?.[0];
       if (file && file.type.startsWith('image/')) {
-          const allowedTypes = ['image/jpeg', 'image/png'];
+          const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
           if (!allowedTypes.includes(file.type)) {
               setFileTypeError('For best results, please use PNG, JPG, or JPEG formats.');
+              onFileSelect(file);
           } else {
               setFileTypeError(null);
+              onFileSelect(file);
           }
-          onFileSelect(file);
       }
-  }, [onFileSelect, disabled, onProductDrop]);
+  }, [onFileSelect, disabled]);
   
   const isActionable = !disabled;
 
-  const uploaderClasses = `w-full ${aspectRatio === 'square' ? 'aspect-square' : 'aspect-video'} bg-slate-100 border-2 border-dashed rounded-xl flex items-center justify-center transition-all duration-300 relative overflow-hidden ${
-      isProductDraggingOver ? 'border-green-500 bg-green-50 ring-4 ring-green-200'
-    : isDraggingOver ? 'border-blue-500 bg-blue-50'
-    : 'border-slate-300'
-  } ${isActionable && !isProductDraggingOver ? 'hover:border-blue-500 cursor-pointer' : ''} ${disabled ? 'cursor-not-allowed opacity-70' : ''}`;
+  const uploaderClasses = `w-full ${aspectRatio === 'square' ? 'aspect-square' : 'aspect-video'} bg-gray-100 dark:bg-gray-800 border-2 border-dashed rounded-xl flex items-center justify-center transition-all duration-300 relative overflow-hidden ${
+      isDraggingOver ? 'border-gray-900 dark:border-gray-300 bg-gray-100 dark:bg-gray-700'
+    : 'border-gray-300 dark:border-gray-600'
+  } ${isActionable ? 'hover:border-gray-400 dark:hover:border-gray-500 cursor-pointer' : ''} ${disabled && !imageUrl ? 'cursor-not-allowed opacity-70 dark:opacity-60' : ''}`;
 
   return (
     <div className="flex flex-col items-center w-full">
-      {label && <h3 className="text-xl font-semibold mb-4 text-slate-700">{label}</h3>}
+      {label && <h3 className="text-xl font-semibold mb-4 text-gray-700">{label}</h3>}
       <div
         className={uploaderClasses}
-        onClick={handleClick}
+        onClick={isActionable ? handleClick : undefined}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -149,28 +134,17 @@ const ImageUploader = forwardRef<HTMLImageElement, ImageUploaderProps>(({ id, la
               alt={label || 'Uploaded Scene'} 
               className="w-full h-full object-contain" 
             />
-            {showDebugButton && onDebugClick && (
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onDebugClick();
-                    }}
-                    className="absolute bottom-2 right-2 bg-black bg-opacity-60 text-white text-xs font-semibold px-3 py-1.5 rounded-md hover:bg-opacity-80 transition-all z-20 shadow-lg"
-                    aria-label="Show debug view"
-                >
-                    Debug
-                </button>
-            )}
           </>
         ) : (
-          <div className="text-center text-slate-500 p-4">
+          <div className="text-center text-gray-500 dark:text-gray-400 p-4">
             <UploadIcon />
             <p>Click to upload or drag & drop</p>
+            {disabled && <p className="text-xs mt-1">(Create a new project first)</p>}
           </div>
         )}
       </div>
       {fileTypeError && (
-        <div className="w-full mt-2 text-sm text-yellow-800 bg-yellow-100 border border-yellow-300 rounded-lg p-3 flex items-center animate-fade-in" role="alert">
+        <div className="w-full mt-2 text-sm text-yellow-800 dark:text-yellow-300 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700/50 rounded-lg p-3 flex items-center animate-fade-in" role="alert">
             <WarningIcon />
             <span>{fileTypeError}</span>
         </div>

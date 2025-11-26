@@ -168,33 +168,33 @@ const DrawingModal: React.FC<DrawingModalProps> = ({ isOpen, onClose, onSave, ba
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-80 z-50 flex flex-col items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex flex-col items-center justify-center p-4 animate-fade-in"
       aria-modal="true"
       role="dialog"
     >
       {/* Header Tools */}
-      <div className="w-full max-w-7xl flex justify-between items-center p-2 bg-zinc-800 rounded-t-lg">
+      <div className="w-full max-w-7xl flex justify-between items-center p-2 bg-white dark:bg-gray-800 rounded-t-lg border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-4">
-          <button onClick={handleUndo} className="text-white p-2 rounded-md hover:bg-zinc-700 transition-colors disabled:opacity-50" disabled={historyIndex.current <= 0} aria-label="Undo">
+          <button onClick={handleUndo} className="text-gray-600 dark:text-gray-300 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50" disabled={historyIndex.current <= 0} aria-label="Undo">
             <UndoIcon />
           </button>
-          <button onClick={handleClear} className="text-white font-semibold p-2 rounded-md hover:bg-zinc-700 transition-colors" aria-label="Clear sketch">
+          <button onClick={handleClear} className="text-gray-600 dark:text-gray-300 font-semibold p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm" aria-label="Clear sketch">
             Clear
           </button>
         </div>
-        <div className="text-lg text-white font-bold">Sketch Your Vision</div>
+        <div className="text-lg text-gray-900 dark:text-gray-100 font-bold">Sketch Your Vision</div>
         <div className="flex items-center gap-4">
-            <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+            <button onClick={handleSave} className="bg-gray-900 hover:bg-gray-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">
                 Save Sketch
             </button>
-            <button onClick={onClose} className="text-white p-2 rounded-full hover:bg-zinc-700 transition-colors" aria-label="Close drawing mode">
+            <button onClick={onClose} className="text-gray-500 dark:text-gray-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close drawing mode">
                 <CloseIcon />
             </button>
         </div>
       </div>
       
       {/* Canvas Area */}
-      <div className="w-full max-w-7xl h-full flex-grow bg-zinc-900 flex items-center justify-center overflow-hidden">
+      <div className="w-full max-w-7xl h-full flex-grow bg-gray-100 dark:bg-gray-900 flex items-center justify-center overflow-hidden">
         <canvas
           ref={canvasRef}
           onMouseDown={startDrawing}
@@ -209,26 +209,26 @@ const DrawingModal: React.FC<DrawingModalProps> = ({ isOpen, onClose, onSave, ba
       </div>
 
       {/* Footer Tools */}
-      <div className="w-full max-w-7xl flex flex-col sm:flex-row justify-between items-center gap-4 p-3 bg-zinc-800 rounded-b-lg">
+      <div className="w-full max-w-7xl flex flex-col sm:flex-row justify-between items-center gap-4 p-3 bg-white dark:bg-gray-800 rounded-b-lg border-t border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3">
           {colors.map(c => (
             <button 
               key={c}
               onClick={() => { setColor(c); setIsErasing(false); }}
-              className={`w-8 h-8 rounded-full transition-transform transform hover:scale-110 ${color === c && !isErasing ? 'ring-2 ring-offset-2 ring-offset-zinc-800 ring-white' : ''}`}
-              style={{ backgroundColor: c }}
+              className={`w-8 h-8 rounded-full transition-transform transform hover:scale-110 ${color === c && !isErasing ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ring-gray-900 dark:ring-gray-200' : ''}`}
+              style={{ backgroundColor: c, border: c === '#FFFFFF' ? '1px solid #ccc' : 'none' }}
               aria-label={`Select color ${c}`}
             />
           ))}
           <button
             onClick={() => setIsErasing(true)}
-            className={`w-8 h-8 rounded-full bg-zinc-600 flex items-center justify-center text-white transition-transform transform hover:scale-110 ${isErasing ? 'ring-2 ring-offset-2 ring-offset-zinc-800 ring-white' : ''}`}
+            className={`w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-gray-800 dark:text-gray-200 transition-transform transform hover:scale-110 ${isErasing ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ring-gray-900 dark:ring-gray-200' : ''}`}
             aria-label="Eraser tool"
           >
            E
           </button>
         </div>
-        <div className="flex items-center gap-3 text-white">
+        <div className="flex items-center gap-3 text-gray-600 dark:text-gray-300">
           <span>Brush Size</span>
           <input 
             type="range"
@@ -236,7 +236,7 @@ const DrawingModal: React.FC<DrawingModalProps> = ({ isOpen, onClose, onSave, ba
             max="50"
             value={brushSize}
             onChange={e => setBrushSize(Number(e.target.value))}
-            className="w-36 accent-blue-500"
+            className="w-36 accent-gray-900 dark:accent-indigo-500"
           />
         </div>
       </div>

@@ -76,11 +76,12 @@ const ProductSelector: React.FC<ProductSelectorProps> = ({ products, onAddOwnPro
 
     return (
         <div className="w-full max-w-6xl mx-auto text-center animate-fade-in">
+             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4">Add Products to Your Scene</h2>
             <div className="relative flex items-center">
                 <button 
                     onClick={() => scroll('left')}
                     disabled={!canScrollLeft}
-                    className="absolute -left-4 z-10 p-2 bg-white rounded-full shadow-md hover:bg-zinc-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="absolute -left-4 z-10 p-2 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-full shadow-md hover:bg-zinc-100 dark:hover:bg-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Scroll left"
                 >
                     <ArrowLeftIcon />
@@ -105,7 +106,7 @@ const ProductSelector: React.FC<ProductSelectorProps> = ({ products, onAddOwnPro
                  <button 
                     onClick={() => scroll('right')}
                     disabled={!canScrollRight}
-                    className="absolute -right-4 z-10 p-2 bg-white rounded-full shadow-md hover:bg-zinc-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="absolute -right-4 z-10 p-2 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-full shadow-md hover:bg-zinc-100 dark:hover:bg-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Scroll right"
                 >
                     <ArrowRightIcon />
@@ -114,7 +115,7 @@ const ProductSelector: React.FC<ProductSelectorProps> = ({ products, onAddOwnPro
             <div className="mt-8">
                 <button
                     onClick={onAddOwnProductClick}
-                    className="bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold py-2 px-6 rounded-lg text-md transition-colors border border-zinc-300 shadow-sm"
+                    className="bg-zinc-100 hover:bg-zinc-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-zinc-800 dark:text-gray-200 font-bold py-2 px-6 rounded-lg text-md transition-colors border border-zinc-300 dark:border-gray-600 shadow-sm"
                 >
                     Add Your Own Product!
                 </button>

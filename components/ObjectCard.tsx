@@ -17,9 +17,9 @@ interface ObjectCardProps {
 
 const ObjectCard: React.FC<ObjectCardProps> = ({ product, onDragStart, onDragEnd, onTouchStart, onTouchMove, onTouchEnd }) => {
     const cardClasses = `
-        bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300
+        bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden transition-all duration-300
         cursor-grab active:cursor-grabbing hover:shadow-xl hover:scale-105
-        border border-zinc-200
+        border border-zinc-200 dark:border-gray-700
     `;
 
     return (
@@ -32,11 +32,11 @@ const ObjectCard: React.FC<ObjectCardProps> = ({ product, onDragStart, onDragEnd
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
         >
-            <div className="aspect-square w-full bg-zinc-100 flex items-center justify-center pointer-events-none">
+            <div className="aspect-square w-full bg-zinc-100 dark:bg-gray-700 flex items-center justify-center pointer-events-none">
                 <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain" />
             </div>
             <div className="p-3 text-center pointer-events-none">
-                <h4 className="text-sm font-semibold text-zinc-700 truncate">{product.name}</h4>
+                <h4 className="text-sm font-semibold text-zinc-700 dark:text-gray-300 truncate">{product.name}</h4>
             </div>
         </div>
     );

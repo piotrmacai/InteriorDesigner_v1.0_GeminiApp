@@ -27,7 +27,7 @@ const TouchGhost: React.FC<TouchGhostProps> = ({ imageUrl, position }) => {
   };
 
   return (
-    <div style={style} className="bg-white/80 backdrop-blur-md rounded-2xl shadow-2xl p-2">
+    <div style={style} className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-2xl p-2">
       <img
         src={imageUrl}
         alt="Dragging product"
